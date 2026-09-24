@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Edit Task</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+
+<body>
+
+
+<div class="edit-page">
+
+
+    <div class="edit-card">
+
+
+        <div class="edit-header">
+
+            <h1>Edit Task</h1>
+
+            <p>
+                Update your task details
+            </p>
+
+        </div>
+
+
+        <form
+            action="/update/{{ task.id }}"
+            method="POST"
+        >
+
+
+            <div class="form-group">
+
+                <label>Task Title</label>
+
+                <input
+                    type="text"
+                    name="title"
+                    value="{{ task.title }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Description</label>
+
+                <textarea
+                    name="description"
+                    required
+                >{{ task.description }}</textarea>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Priority</label>
+
+                <select name="priority" required>
+
+
+                    <option
+                        value="High"
+                        {% if task.priority == "High" %}
+                        selected
+                        {% endif %}
+                    >
+                        High
+                    </option>
+
+
+                    <option
+                        value="Medium"
+                        {% if task.priority == "Medium" %}
+                        selected
+                        {% endif %}
+                    >
+                        Medium
+                    </option>
+
+
+                    <option
+                        value="Low"
+                        {% if task.priority == "Low" %}
+                        selected
+                        {% endif %}
+                    >
+                        Low
+                    </option>
+
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Due Date</label>
+
+                <input
+                    type="date"
+                    name="due_date"
+                    value="{{ task.due_date }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="edit-actions">
+
+                <button
+                    type="submit"
+                    class="add-btn"
+                >
+                    Update Task
+                </button>
+
+
+                <a
+                    href="/"
+                    class="back-btn"
+                >
+                    Cancel
+                </a>
+
+            </div>
+
+
+        </form>
+
+
+    </div>
+
+
+</div>
+
+
+</body>
+
+</html>

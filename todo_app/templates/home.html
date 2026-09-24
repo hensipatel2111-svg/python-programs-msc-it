@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>TO-DO Application</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+
+<body>
+
+
+<!-- HEADER -->
+
+<div class="header">
+
+    <div>
+
+        <h1>TO-DO List</h1>
+
+        <p>
+            Manage your daily tasks easily
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="container">
+
+
+    <!-- ADD TASK CARD -->
+
+    <div class="card add-card">
+
+        <h2>Add New Task</h2>
+
+        <form action="/add" method="POST">
+
+
+            <div class="form-group">
+
+                <label>Task Title</label>
+
+                <input
+                    type="text"
+                    name="title"
+                    placeholder="Enter task title"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Description</label>
+
+                <textarea
+                    name="description"
+                    placeholder="Enter task description"
+                    required
+                ></textarea>
+
+            </div>
+
+
+            <div class="form-row">
+
+
+                <div class="form-group">
+
+                    <label>Priority</label>
+
+                    <select name="priority" required>
+
+                        <option value="">
+                            Select Priority
+                        </option>
+
+                        <option value="High">
+                            High
+                        </option>
+
+                        <option value="Medium">
+                            Medium
+                        </option>
+
+                        <option value="Low">
+                            Low
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>Due Date</label>
+
+                    <input
+                        type="date"
+                        name="due_date"
+                        required
+                    >
+
+                </div>
+
+
+            </div>
+
+
+            <button class="add-btn"
+                    type="submit">
+
+                + Add Task
+
+            </button>
+
+
+        </form>
+
+    </div>
+
+
+    <!-- PENDING TASKS -->
+
+    <div class="section">
+
+
+        <div class="section-title">
+
+            <h2>Pending Tasks</h2>
+
+            <span class="count pending-count">
+                {{ pending_tasks|length }}
+            </span>
+
+        </div>
+
+
+        {% if pending_tasks %}
+
+
+        <div class="task-list">
+
+
+            {% for task in pending_tasks %}
+
+
+            <div class="task-card">
+
+
+                <div class="task-info">
+
+
+                    <div class="task-top">
+
+                        <h3>
+                            {{ task.title }}
+                        </h3>
+
+
+                        <span class="priority {{ task.priority|lower }}">
+
+                            {{ task.priority }}
+
+                        </span>
+
+                    </div>
+
+
+                    <p class="description">
+
+                        {{ task.description }}
+
+                    </p>
+
+
+                    <p class="due-date">
+
+                        📅 Due:
+                        {{ task.due_date }}
+
+                    </p>
+
+
+                </div>
+
+
+                <div class="actions">
+
+
+                    <a
+                        href="/toggle/{{ task.id }}"
+                        class="complete-btn"
+                    >
+                        ✓ Complete
+                    </a>
+
+
+                    <a
+                        href="/edit/{{ task.id }}"
+                        class="edit-btn"
+                    >
+                        ✎ Edit
+                    </a>
+
+
+                    <form
+                        action="/delete/{{ task.id }}"
+                        method="POST"
+                    >
+
+                        <button
+                            type="submit"
+                            class="delete-btn"
+                            onclick="return confirm('Delete this task?')"
+                        >
+                            🗑 Delete
+                        </button>
+
+                    </form>
+
+
+                </div>
+
+
+            </div>
+
+
+            {% endfor %}
+
+
+        </div>
+
+
+        {% else %}
+
+
+        <div class="empty-box">
+
+            <div class="empty-icon">✓</div>
+
+            <h3>No Pending Tasks</h3>
+
+            <p>
+                Great! You have completed all your tasks.
+            </p>
+
+        </div>
+
+
+        {% endif %}
+
+
+    </div>
+
+
+    <!-- COMPLETED TASKS -->
+
+    <div class="section">
+
+
+        <div class="section-title">
+
+            <h2>Completed Tasks</h2>
+
+            <span class="count completed-count">
+                {{ completed_tasks|length }}
+            </span>
+
+        </div>
+
+
+        {% if completed_tasks %}
+
+
+        <div class="task-list">
+
+
+            {% for task in completed_tasks %}
+
+
+            <div class="task-card completed-task">
+
+
+                <div class="task-info">
+
+
+                    <div class="task-top">
+
+                        <h3>
+                            {{ task.title }}
+                        </h3>
+
+
+                        <span class="completed-badge">
+
+                            ✓ Completed
+
+                        </span>
+
+                    </div>
+
+
+                    <p class="description">
+
+                        {{ task.description }}
+
+                    </p>
+
+
+                    <p class="due-date">
+
+                        📅 Due:
+                        {{ task.due_date }}
+
+                    </p>
+
+
+                </div>
+
+
+                <div class="actions">
+
+
+                    <a
+                        href="/toggle/{{ task.id }}"
+                        class="pending-btn"
+                    >
+                        ↩ Move to Pending
+                    </a>
+
+
+                    <a
+                        href="/edit/{{ task.id }}"
+                        class="edit-btn"
+                    >
+                        ✎ Edit
+                    </a>
+
+
+                    <form
+                        action="/delete/{{ task.id }}"
+                        method="POST"
+                    >
+
+                        <button
+                            type="submit"
+                            class="delete-btn"
+                            onclick="return confirm('Delete this task?')"
+                        >
+                            🗑 Delete
+                        </button>
+
+                    </form>
+
+
+                </div>
+
+
+            </div>
+
+
+            {% endfor %}
+
+
+        </div>
+
+
+        {% else %}
+
+
+        <div class="empty-box">
+
+            <div class="empty-icon">📋</div>
+
+            <h3>No Completed Tasks</h3>
+
+            <p>
+                Complete your pending tasks and they will appear here.
+            </p>
+
+        </div>
+
+
+        {% endif %}
+
+
+    </div>
+
+
+</div>
+
+
+</body>
+
+</html>
