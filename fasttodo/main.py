@@ -1,182 +1,280 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
-import jwt
-from datetime import datetime, timedelta, timezone
+
+from fastapi import FastAPI, Request, Form, Depends
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from datetime import datetime
+
+app = FastAPI()
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="my_task_tracker_secret_key_2026"
+)
+
+DATABASE_URL = "sqlite:///./tasks.db"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
 
 
-app = FastAPI(title="JWT Authentication API")
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(150), nullable=False)
+    description = Column(String(300))
+    priority = Column(String(20), default="Medium")
+    is_completed = Column(Boolean, default=False)
+    created_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
 
 
-# =========================
-# JWT CONFIGURATION
-# =========================
+Base.metadata.create_all(bind=engine)
 
-SECRET_KEY = "my-super-secret-key-for-jwt-authentication-2026"
-ALGORITHM = "HS256"
-TOKEN_EXPIRE_MINUTES = 30
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+templates = Jinja2Templates(directory="templates")
 
 
-# =========================
-# FAKE DATABASE
-# =========================
-
-users_db = {}
-
-
-# =========================
-# PYDANTIC MODELS
-# =========================
-
-class UserSignup(BaseModel):
-    username: str
-    password: str
-    full_name: str
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-class UserLogin(BaseModel):
-    username: str
-    password: str
+@app.get("/")
+def home(request: Request, db: Session = Depends(get_db)):
+    username = request.session.get("username")
+
+    if not username:
+        return RedirectResponse("/login", status_code=303)
+
+    pending_tasks = db.query(Task).filter(
+        Task.created_by == username,
+        Task.is_completed == False
+    ).order_by(Task.created_at.desc()).all()
+
+    completed_tasks = db.query(Task).filter(
+        Task.created_by == username,
+        Task.is_completed == True
+    ).order_by(Task.created_at.desc()).all()
+
+    theme = request.cookies.get("theme", "light")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="home.html",
+        context={
+            "username": username,
+            "pending_tasks": pending_tasks,
+            "completed_tasks": completed_tasks,
+            "theme": theme
+        }
+    )
 
 
-# =========================
-# REGISTER API
-# =========================
+@app.get("/login")
+def login_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={}
+    )
 
-@app.post("/register")
-def register(user: UserSignup):
-
-    if user.username in users_db:
-        raise HTTPException(
-            status_code=400,
-            detail="Username already exists"
-        )
-
-    users_db[user.username] = {
-        "username": user.username,
-        "password": user.password,
-        "full_name": user.full_name
-    }
-
-    print("User registered:", user.username)
-
-    return {
-        "message": "User registered successfully",
-        "username": user.username
-    }
-
-
-# =========================
-# LOGIN API
-# =========================
 
 @app.post("/login")
-def login(user: UserLogin):
+def login(request: Request, username: str = Form(...)):
+    username = username.strip()
 
-    db_user = users_db.get(user.username)
+    if not username:
+        return RedirectResponse("/login", status_code=303)
 
-    if not db_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password"
-        )
+    request.session["username"] = username
 
-    if user.password != db_user["password"]:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password"
-        )
+    return RedirectResponse("/", status_code=303)
 
-    print("User logged in:", user.username)
 
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=TOKEN_EXPIRE_MINUTES
+@app.post("/add")
+def add_task(
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(""),
+    priority: str = Form("Medium"),
+    db: Session = Depends(get_db)
+):
+    username = request.session.get("username")
+
+    if not username:
+        return RedirectResponse("/login", status_code=303)
+
+    title = title.strip()
+    description = description.strip()
+
+    if not title or len(title) > 150 or len(description) > 300:
+        return RedirectResponse("/", status_code=303)
+
+    if priority not in ["High", "Medium", "Low"]:
+        priority = "Medium"
+
+    task = Task(
+        title=title,
+        description=description,
+        priority=priority,
+        created_by=username
     )
 
-    payload = {
-        "sub": user.username,
-        "name": db_user["full_name"],
-        "exp": expire
-    }
+    db.add(task)
+    db.commit()
 
-    token = jwt.encode(
-        payload,
-        SECRET_KEY,
-        algorithm=ALGORITHM
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/toggle/{id}")
+def toggle_task(
+    id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    username = request.session.get("username")
+
+    if not username:
+        return RedirectResponse("/login", status_code=303)
+
+    task = db.query(Task).filter(
+        Task.id == id,
+        Task.created_by == username
+    ).first()
+
+    if task:
+        task.is_completed = not task.is_completed
+        db.commit()
+
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/edit/{id}")
+def edit_task(
+    id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    username = request.session.get("username")
+
+    if not username:
+        return RedirectResponse("/login", status_code=303)
+
+    task = db.query(Task).filter(
+        Task.id == id,
+        Task.created_by == username
+    ).first()
+
+    if not task:
+        return RedirectResponse("/", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="edit.html",
+        context={"task": task, "username": username}
     )
 
-    print("JWT token generated for:", user.username)
 
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
-
-
-# =========================
-# GET CURRENT USER
-# =========================
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme)
+@app.post("/update/{id}")
+def update_task(
+    id: int,
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(""),
+    priority: str = Form("Medium"),
+    db: Session = Depends(get_db)
 ):
+    username = request.session.get("username")
 
-    try:
+    if not username:
+        return RedirectResponse("/login", status_code=303)
 
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM]
-        )
+    task = db.query(Task).filter(
+        Task.id == id,
+        Task.created_by == username
+    ).first()
 
-        username = payload.get("sub")
+    if not task:
+        return RedirectResponse("/", status_code=303)
 
-        if username is None:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token"
-            )
+    title = title.strip()
+    description = description.strip()
 
-        user = users_db.get(username)
+    if not title or len(title) > 150 or len(description) > 300:
+        return RedirectResponse(f"/edit/{id}", status_code=303)
 
-        if user is None:
-            raise HTTPException(
-                status_code=401,
-                detail="User not found"
-            )
+    if priority not in ["High", "Medium", "Low"]:
+        priority = "Medium"
 
-        return user
+    task.title = title
+    task.description = description
+    task.priority = priority
 
-    except jwt.ExpiredSignatureError:
+    db.commit()
 
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
+    return RedirectResponse("/", status_code=303)
 
 
-# =========================
-# PROTECTED PROFILE API
-# =========================
-
-@app.get("/profile")
-def profile(
-    current_user: dict = Depends(get_current_user)
+@app.post("/delete/{id}")
+def delete_task(
+    id: int,
+    request: Request,
+    db: Session = Depends(get_db)
 ):
+    username = request.session.get("username")
 
-    print("Profile accessed by:", current_user["username"])
+    if not username:
+        return RedirectResponse("/login", status_code=303)
 
-    return {
-        "message": "Authentication successful",
-        "username": current_user["username"],
-        "full_name": current_user["full_name"]
-    }
+    task = db.query(Task).filter(
+        Task.id == id,
+        Task.created_by == username
+    ).first()
+
+    if task:
+        db.delete(task)
+        db.commit()
+
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/set-theme/{theme}")
+def set_theme(theme: str, request: Request):
+    if not request.session.get("username"):
+        return RedirectResponse("/login", status_code=303)
+
+    if theme not in ["light", "dark"]:
+        return RedirectResponse("/", status_code=303)
+
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        key="theme",
+        value=theme,
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        samesite="lax"
+    )
+
+    return response
+
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
